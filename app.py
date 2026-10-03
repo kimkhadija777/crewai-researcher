@@ -1,9 +1,8 @@
 import os
 import streamlit as st
-from crewai import Agent, Crew, Process, Task
+from crewai import Agent, Crew, Process, Task, LLM
 from crewai.tools import tool
 from duckduckgo_search import DDGS
-from langchain_groq import ChatGroq
 
 # -----------------------------------------------------------------------------
 # PAGE CONFIGURATION & MODERN UI STYLING
@@ -18,13 +17,11 @@ st.set_page_config(
 # Custom CSS for modern glassmorphism & styled cards
 st.markdown("""
 <style>
-    /* Global styling */
     .stApp {
         background-color: #0e1117;
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     }
     
-    /* Header Container */
     .main-header {
         background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
         padding: 2rem;
@@ -46,19 +43,6 @@ st.markdown("""
         font-size: 1rem;
     }
     
-    /* Status Badge */
-    .agent-badge {
-        display: inline-block;
-        background: rgba(59, 130, 246, 0.1);
-        color: #60a5fa;
-        padding: 0.25rem 0.75rem;
-        border-radius: 9999px;
-        font-size: 0.875rem;
-        font-weight: 500;
-        border: 1px solid rgba(59, 130, 246, 0.2);
-    }
-    
-    /* Result Box */
     .report-card {
         background: #111827;
         border: 1px solid #1f2937;
@@ -70,7 +54,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# DEFINE SAFE, NATIVE CREWAI SEARCH TOOL
+# DEFINE NATIVE CREWAI SEARCH TOOL
 # -----------------------------------------------------------------------------
 @tool("Web Search Tool")
 def web_search_tool(query: str) -> str:
@@ -87,7 +71,6 @@ def web_search_tool(query: str) -> str:
     except Exception as e:
         return f"Error executing search: {str(e)}"
 
-
 # -----------------------------------------------------------------------------
 # MAIN UI INTERFACE
 # -----------------------------------------------------------------------------
@@ -98,11 +81,19 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+# Retrieve secret API key if available
+default_api_key = st.secrets.get("GROQ_API_KEY", "")
+
 # Sidebar Configuration
 with st.sidebar:
     st.markdown("### ⚙️ System Configuration")
     
-    groq_api_key = st.text_input("Groq API Key:", type="password", help="Get your free key from console.groq.com")
+    groq_api_key = st.text_input(
+        "Groq API Key:", 
+        value=default_api_key, 
+        type="password", 
+        help="Loaded automatically if set in Streamlit Secrets, or enter manually."
+    )
     
     model_choice = st.selectbox(
         "Groq Architecture Model:",
@@ -126,7 +117,7 @@ col1, col2 = st.columns([3, 1])
 with col1:
     research_topic = st.text_input(
         "Research Target Topic:",
-        placeholder="e.g., Quantum Computing Applications in Financial Risk Management 2026"
+        placeholder="e.g., Recent advances in solid-state battery technology and commercialization timelines in 2026"
     )
 
 with col2:
@@ -138,16 +129,19 @@ with col2:
 # -----------------------------------------------------------------------------
 if run_button:
     if not groq_api_key:
-        st.error("🔑 Groq API Key is missing. Please provide a valid key in the sidebar.")
+        st.error("🔑 Groq API Key is missing. Please set GROQ_API_KEY in Streamlit Secrets or enter it manually in the sidebar.")
     elif not research_topic.strip():
         st.warning("⚠️ Please specify a valid research topic before launching agents.")
     else:
         try:
-            # Initialize Groq LLM
-            llm = ChatGroq(
-                groq_api_key=groq_api_key,
-                model_name=model_choice,
-                temperature=0.2
+            # Set environment variable for CrewAI native LLM wrapper
+            os.environ["GROQ_API_KEY"] = groq_api_key
+
+            # Native CrewAI LLM Initialization (Fixes Pydantic ValidationError)
+            llm = LLM(
+                model=f"groq/{model_choice}",
+                temperature=0.2,
+                api_key=groq_api_key
             )
 
             # Define Agents
