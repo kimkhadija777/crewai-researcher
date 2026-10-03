@@ -61,27 +61,25 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# STRICT GROQ-COMPLIANT TOOL SCHEMA
+# GROQ-COMPLIANT TOOL DEFINITION (FIXED DECORATOR)
 # -----------------------------------------------------------------------------
-class WebSearchInput(BaseModel):
-    query: str = Field(..., description="The search query string to look up on the web. Example: 'solid state battery advances 2026'")
-
-@tool("web_search_tool", args_schema=WebSearchInput)
+@tool("Web Search Tool")
 def web_search_tool(query: str) -> str:
-    """Useful to search the web for latest news, developments, and statistics on any topic."""
+    """Useful to search the web for latest news, developments, and statistics on any topic. 
+    Pass a clear, concise search query string in the 'query' parameter."""
     try:
-        # Clean query string
+        # Clean search query string
         cleaned_query = re.sub(r'[^\w\s]', '', query).strip()
         
         results = DDGS().text(keywords=cleaned_query, max_results=5)
         
-        # Fallback if exact search returns nothing
+        # Fallback search if exact search returns empty
         if not results and len(cleaned_query.split()) > 3:
             shorter_query = " ".join(cleaned_query.split()[:3])
             results = DDGS().text(keywords=shorter_query, max_results=5)
             
         if not results:
-            return f"No live search results found for query: '{query}'. Provide an analytical synthesis based on standard core domain knowledge."
+            return f"No live search results found for query: '{query}'. Provide an analytical synthesis based on core domain knowledge."
         
         formatted_results = []
         for r in results:
@@ -108,7 +106,7 @@ st.markdown("""
 secret_key = st.secrets.get("GROQ_API_KEY", os.environ.get("GROQ_API_KEY", ""))
 
 with st.sidebar:
-    st.markdown("### ⚙️️ System Configuration")
+    st.markdown("### ⚙️ System Configuration")
     
     if secret_key:
         st.success("🔒 Groq API Key loaded from Streamlit Secrets!")
@@ -122,9 +120,9 @@ with st.sidebar:
     
     model_choice = st.selectbox(
         "Groq Architecture Model:",
-        options=["llama-3.3-70b-versatile", "llama3-70b-8192", "llama3-8b-8192"],
+        options=["openai/gpt-oss-120b", "openai/gpt-oss-20b"],
         index=0,
-        help="Select a Groq model optimized for tool calling."
+        help="Select the Groq model for your research team."
     )
     
     st.markdown("---")
@@ -160,6 +158,7 @@ if run_button:
         try:
             os.environ["GROQ_API_KEY"] = groq_api_key
 
+            # Groq LLM Configuration with OpenAI interface handling
             llm = LLM(
                 model=f"groq/{model_choice}",
                 temperature=0.1,
@@ -195,10 +194,7 @@ if run_button:
             )
 
             task_research = Task(
-                description=(
-                    f"Search the web for recent developments regarding '{research_topic}'. "
-                    "When calling the tool `web_search_tool`, always pass a valid JSON string argument in the parameter `query`."
-                ),
+                description=f"Search the web for recent developments regarding '{research_topic}'. Gather relevant stats, timelines, and technical insights.",
                 expected_output="Categorized notes, numbers, and key facts.",
                 agent=researcher
             )
