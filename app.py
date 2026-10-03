@@ -1,5 +1,33 @@
 import os
 import streamlit as st
+
+# -----------------------------------------------------------------------------
+# MONKEY PATCH: FIX CREWAI / GROQ CACHE_BREAKPOINT BUG
+# CrewAI injects `cache_breakpoint` into messages for caching, but Groq's API
+# rejects this field. We intercept litellm.completion to strip it out.
+# -----------------------------------------------------------------------------
+import litellm
+
+_original_litellm_completion = litellm.completion
+
+def _patched_litellm_completion(*args, **kwargs):
+    if "messages" in kwargs and isinstance(kwargs["messages"], list):
+        cleaned_messages = []
+        for msg in kwargs["messages"]:
+            if isinstance(msg, dict):
+                # Clean message dictionary of unsupported keys
+                cleaned_msg = {k: v for k, v in msg.items() if k != "cache_breakpoint"}
+                cleaned_messages.append(cleaned_msg)
+            else:
+                cleaned_messages.append(msg)
+        kwargs["messages"] = cleaned_messages
+    return _original_litellm_completion(*args, **kwargs)
+
+litellm.completion = _patched_litellm_completion
+
+# -----------------------------------------------------------------------------
+# CREWAI & DOMAIN IMPORTS
+# -----------------------------------------------------------------------------
 from crewai import Agent, Crew, Process, Task, LLM
 from crewai.tools import tool
 from duckduckgo_search import DDGS
@@ -14,7 +42,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for modern glassmorphism & styled cards
+# Custom CSS
 st.markdown("""
 <style>
     .stApp {
@@ -81,14 +109,13 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Read from secrets or environment variable
+# Secret management
 secret_key = st.secrets.get("GROQ_API_KEY", os.environ.get("GROQ_API_KEY", ""))
 
-# Sidebar Configuration
+# Sidebar
 with st.sidebar:
     st.markdown("### ⚙️ System Configuration")
     
-    # Hide key input box if key is already detected in secrets
     if secret_key:
         st.success("🔒 Groq API Key loaded from Streamlit Secrets!")
         groq_api_key = secret_key
@@ -138,10 +165,10 @@ if run_button:
         st.warning("⚠️ Please specify a valid research topic before launching agents.")
     else:
         try:
-            # Set environment key for litellm engine
+            # Set environment variable
             os.environ["GROQ_API_KEY"] = groq_api_key
 
-            # Initialize CrewAI LLM with provider prefix
+            # Initialize CrewAI LLM
             llm = LLM(
                 model=f"groq/{model_choice}",
                 temperature=0.2,
@@ -224,4 +251,4 @@ if run_button:
 
         except Exception as e:
             st.error(f"Execution Error: {str(e)}")
-        
+            
