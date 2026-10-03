@@ -81,25 +81,29 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Retrieve secret API key if available
-default_api_key = st.secrets.get("GROQ_API_KEY", "")
+# Read from secrets or environment variable
+secret_key = st.secrets.get("GROQ_API_KEY", os.environ.get("GROQ_API_KEY", ""))
 
 # Sidebar Configuration
 with st.sidebar:
     st.markdown("### ⚙️ System Configuration")
     
-    groq_api_key = st.text_input(
-        "Groq API Key:", 
-        value=default_api_key, 
-        type="password", 
-        help="Loaded automatically if set in Streamlit Secrets, or enter manually."
-    )
+    # Hide key input box if key is already detected in secrets
+    if secret_key:
+        st.success("🔒 Groq API Key loaded from Streamlit Secrets!")
+        groq_api_key = secret_key
+    else:
+        groq_api_key = st.text_input(
+            "Enter Groq API Key:", 
+            type="password", 
+            help="Get your key from console.groq.com"
+        )
     
     model_choice = st.selectbox(
         "Groq Architecture Model:",
-        options=["openai/gpt-oss-120b", "openai/gpt-oss-20b"],
+        options=["openai/gpt-oss-120b", "openai/gpt-oss-20b", "llama-3.3-70b-versatile"],
         index=0,
-        help="120B model delivers deep analytical output; 20B provides faster execution."
+        help="120B model provides deep analytical capabilities; 20B / Llama 3.3 provide speed."
     )
     
     st.markdown("---")
@@ -129,15 +133,15 @@ with col2:
 # -----------------------------------------------------------------------------
 if run_button:
     if not groq_api_key:
-        st.error("🔑 Groq API Key is missing. Please set GROQ_API_KEY in Streamlit Secrets or enter it manually in the sidebar.")
+        st.error("🔑 Groq API Key is missing. Please set GROQ_API_KEY in Streamlit Secrets or enter it manually.")
     elif not research_topic.strip():
         st.warning("⚠️ Please specify a valid research topic before launching agents.")
     else:
         try:
-            # Set environment variable for CrewAI native LLM wrapper
+            # Set environment key for litellm engine
             os.environ["GROQ_API_KEY"] = groq_api_key
 
-            # Native CrewAI LLM Initialization (Fixes Pydantic ValidationError)
+            # Initialize CrewAI LLM with provider prefix
             llm = LLM(
                 model=f"groq/{model_choice}",
                 temperature=0.2,
@@ -220,4 +224,4 @@ if run_button:
 
         except Exception as e:
             st.error(f"Execution Error: {str(e)}")
-            
+        
