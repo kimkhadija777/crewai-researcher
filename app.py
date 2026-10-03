@@ -1,7 +1,7 @@
 import os
 import streamlit as st
 from crewai import Agent, Crew, Process, Task
-from crewai_tools import DuckDuckGoSearchRun
+from crewai_tools import DuckDuckGoSearchTool
 from langchain_groq import ChatGroq
 
 # Streamlit Page Config
@@ -42,8 +42,8 @@ if st.button("Start Research", type="primary"):
                 temperature=0.3
             )
 
-            # Online Web Search Tool (No local installations required)
-            search_tool = DuckDuckGoSearchRun()
+            # Online Web Search Tool from crewai_tools
+            search_tool = DuckDuckGoSearchTool()
 
             # --- AGENT DEFINITIONS ---
             researcher = Agent(
@@ -59,7 +59,7 @@ if st.button("Start Research", type="primary"):
             analyst = Agent(
                 role="Data Analyst & Writer",
                 goal="Synthesize research data into structured, easy-to-read sections.",
-                backstory="An skilled technical writer capable of converting raw web findings into organized, coherent drafts.",
+                backstory="A skilled technical writer capable of converting raw web findings into organized, coherent drafts.",
                 llm=llm,
                 verbose=True,
                 allow_delegation=False
@@ -110,3 +110,4 @@ if st.button("Start Research", type="primary"):
 
         except Exception as e:
             st.error(f"An error occurred: {str(e)}")
+            
