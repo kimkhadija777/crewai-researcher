@@ -1,9 +1,10 @@
 import os
 import re
 import streamlit as st
+from pydantic import BaseModel, Field
 
 # -----------------------------------------------------------------------------
-# MONKEY PATCH: LITELLM / GROQ CACHE_BREAKPOINT FIX
+# LITELLM / GROQ MONKEY PATCH
 # -----------------------------------------------------------------------------
 import litellm
 
@@ -24,7 +25,7 @@ def _patched_litellm_completion(*args, **kwargs):
 litellm.completion = _patched_litellm_completion
 
 # -----------------------------------------------------------------------------
-# IMPORTS & PAGE CONFIGURATION
+# IMPORTS & PAGE CONFIG
 # -----------------------------------------------------------------------------
 from crewai import Agent, Crew, Process, Task, LLM
 from crewai.tools import tool
@@ -60,24 +61,27 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# ROBUST SEARCH TOOL (USING NEW DDGS PACKAGE)
+# STRICT GROQ-COMPLIANT TOOL SCHEMA
 # -----------------------------------------------------------------------------
-@tool("Web Search Tool")
+class WebSearchInput(BaseModel):
+    query: str = Field(..., description="The search query string to look up on the web. Example: 'solid state battery advances 2026'")
+
+@tool("web_search_tool", args_schema=WebSearchInput)
 def web_search_tool(query: str) -> str:
-    """Searches the internet for accurate, real-time facts and latest developments on any topic."""
+    """Useful to search the web for latest news, developments, and statistics on any topic."""
     try:
-        # Clean query strings
+        # Clean query string
         cleaned_query = re.sub(r'[^\w\s]', '', query).strip()
         
         results = DDGS().text(keywords=cleaned_query, max_results=5)
         
-        # Fallback search if exact term fails
+        # Fallback if exact search returns nothing
         if not results and len(cleaned_query.split()) > 3:
             shorter_query = " ".join(cleaned_query.split()[:3])
             results = DDGS().text(keywords=shorter_query, max_results=5)
             
         if not results:
-            return f"No search results returned for query: '{query}'. Please summarize findings based on core analytical background knowledge."
+            return f"No live search results found for query: '{query}'. Provide an analytical synthesis based on standard core domain knowledge."
         
         formatted_results = []
         for r in results:
@@ -88,7 +92,7 @@ def web_search_tool(query: str) -> str:
             )
         return "\n---\n".join(formatted_results)
     except Exception as e:
-        return f"Search notice: {str(e)}. Proceed with domain synthesis."
+        return f"Search execution notice: {str(e)}. Proceeding with domain analysis."
 
 # -----------------------------------------------------------------------------
 # MAIN INTERFACE
@@ -100,11 +104,11 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Streamlit secrets detection
+# Secrets retrieval
 secret_key = st.secrets.get("GROQ_API_KEY", os.environ.get("GROQ_API_KEY", ""))
 
 with st.sidebar:
-    st.markdown("### ⚙️ System Configuration")
+    st.markdown("### ⚙️️ System Configuration")
     
     if secret_key:
         st.success("🔒 Groq API Key loaded from Streamlit Secrets!")
@@ -118,9 +122,9 @@ with st.sidebar:
     
     model_choice = st.selectbox(
         "Groq Architecture Model:",
-        options=["openai/gpt-oss-120b", "openai/gpt-oss-20b", "llama-3.3-70b-versatile"],
+        options=["llama-3.3-70b-versatile", "llama3-70b-8192", "llama3-8b-8192"],
         index=0,
-        help="Select the Groq model for your research team."
+        help="Select a Groq model optimized for tool calling."
     )
     
     st.markdown("---")
@@ -158,14 +162,14 @@ if run_button:
 
             llm = LLM(
                 model=f"groq/{model_choice}",
-                temperature=0.2,
+                temperature=0.1,
                 api_key=groq_api_key
             )
 
             researcher = Agent(
                 role="Senior Web Researcher",
-                goal=f"Find recent key statistics and developments regarding: {research_topic}",
-                backstory="An expert researcher proficient in gathering information using concise web queries.",
+                goal=f"Find recent key developments regarding: {research_topic}",
+                backstory="An expert researcher proficient in searching the web with clean search queries.",
                 tools=[web_search_tool],
                 llm=llm,
                 verbose=True,
@@ -174,8 +178,8 @@ if run_button:
 
             analyst = Agent(
                 role="Data Analyst & Synthesizer",
-                goal="Organize and structure raw research into clear thematic sections.",
-                backstory="A technical writer adept at building coherent report structures from web findings.",
+                goal="Organize raw research findings into clear thematic sections.",
+                backstory="A technical analyst skilled at structuring information into detailed summaries.",
                 llm=llm,
                 verbose=True,
                 allow_delegation=False
@@ -183,28 +187,31 @@ if run_button:
 
             editor = Agent(
                 role="Chief Quality Editor",
-                goal="Format, polish, and optimize output clarity.",
-                backstory="A chief publication editor ensuring clean Markdown layout and actionable insights.",
+                goal="Format and polish final research report in Markdown format.",
+                backstory="A senior editor ensuring high readability and clean output formatting.",
                 llm=llm,
                 verbose=True,
                 allow_delegation=False
             )
 
             task_research = Task(
-                description=f"Search web sources for key developments, companies, and details regarding: '{research_topic}'. Keep search terms concise.",
-                expected_output="Categorized research notes, key data points, and relevant context.",
+                description=(
+                    f"Search the web for recent developments regarding '{research_topic}'. "
+                    "When calling the tool `web_search_tool`, always pass a valid JSON string argument in the parameter `query`."
+                ),
+                expected_output="Categorized notes, numbers, and key facts.",
                 agent=researcher
             )
 
             task_analysis = Task(
-                description="Consolidate research findings into a structured report outline with key themes and technical observations.",
-                expected_output="A comprehensive draft featuring clear headers and organized insights.",
+                description="Synthesize the gathered research findings into a structured report outline.",
+                expected_output="A structured draft report with clear topic headings.",
                 agent=analyst
             )
 
             task_edit = Task(
-                description="Review and polish the report into clean Markdown format with an Executive Summary.",
-                expected_output="A publication-ready Markdown research report.",
+                description="Refine and format the final draft into clean Markdown with an Executive Summary.",
+                expected_output="A clean, formatted Markdown research report.",
                 agent=editor
             )
 
